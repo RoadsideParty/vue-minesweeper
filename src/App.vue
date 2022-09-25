@@ -1,48 +1,142 @@
 <script setup>
-import { ref } from 'vue'
-let boomNum = 10
-const row = 10
-const col = 10
+import { ref, computed, watch } from 'vue'
+const boomNum = Number(localStorage.getItem('boomNum')) || 40
+const row = Number(localStorage.getItem('size')) || 20
+const col = Number(localStorage.getItem('size')) || 20
 const createLayout = () => {
-  if (row !== col) {
-    throw new Error('the row and col not equal')
+  const preList = new Array(row)
+  for (let i = 0; i < row; i++) {
+    preList[i] = []
+    for (let j = 0; j < col; j++) {
+      preList[i][j] = {
+        // -1雷 0普通
+        type: 0,
+        // 0未点开 1点开 2插旗
+        state: 0,
+        // 周围雷的个数
+        num: 0,
+        i,
+        j
+      }
+    }
   }
-  let preList = new Array(row * col).fill(0)
-  while (boomNum) {
-    const index = Math.floor(Math.random() * row * col)
-    if (preList[index] === 0) {
-      preList[index] = -1
-      boomNum--
+  let copyBoomNum = boomNum
+  while (copyBoomNum) {
+    const randomRowIndex = Math.floor(Math.random() * row)
+    const randomColIndex = Math.floor(Math.random() * col)
+    if (preList[randomRowIndex][randomColIndex].type === 0) {
+      preList[randomRowIndex][randomColIndex].type = -1
+      copyBoomNum--
     }
   }
   return preList
 }
 const list = ref(createLayout())
-for (let i = 0; i < list.value.length; i++) {
-  if (list.value[i] === -1) {
-    // left top 
-    list.value[i - row - 1] !== undefined && list.value[i - row - 1] !== -1 && list.value[i - row - 1]++
-    // top
-    list.value[i - row] !== undefined && list.value[i - row] !== -1 && list.value[i - row]++
-    // right top
-    list.value[i - row + 1] !== undefined && list.value[i - row + 1] !== -1 && list.value[i - row + 1]++
-    // left
-    list.value[i - 1] !== undefined && list.value[i - 1] !== -1 && list.value[i - 1]++
-    // right
-    list.value[i + 1] !== undefined && list.value[i + 1] !== -1 && list.value[i + 1]++
-    // left bottom
-    list.value[i + row - 1] !== undefined && list.value[i + row - 1] !== -1 && list.value[i + row - 1]++
-    // bottom
-    list.value[i + row] !== undefined && list.value[i + row] !== -1 && list.value[i + row]++
-    // right bottom
-    list.value[i + row + 1] !== undefined && list.value[i + row + 1] !== -1 && list.value[i + row + 1]++
+const getAroundItemList = (i, j) => {
+  const aroundItemList = []
+  if (i !== 0 && j !== 0) {
+    aroundItemList.push(list.value[i - 1][j - 1])
   }
+  if (j !== 0) {
+    aroundItemList.push(list.value[i][j - 1])
+  }
+  if (i !== 0 && j !== col - 1) {
+    aroundItemList.push(list.value[i - 1][j + 1])
+  }
+  if (i !== 0) {
+    aroundItemList.push(list.value[i - 1][j])
+  }
+  if (j !== col - 1) {
+    aroundItemList.push(list.value[i][j + 1])
+  }
+  if (i !== row - 1 && j !== 0) {
+    aroundItemList.push(list.value[i + 1][j - 1])
+  }
+  if (i !== row - 1) {
+    aroundItemList.push(list.value[i + 1][j])
+  }
+  if (i !== row - 1 && j !== col - 1) {
+    aroundItemList.push(list.value[i + 1][j + 1])
+  }
+  return aroundItemList
+}
+for (let i = 0; i < list.value.length; i++) {
+  for (let j = 0; j < list.value[i].length; j++) {
+    if (list.value[i][j].type === -1) {
+      getAroundItemList(i, j).forEach(item => {
+        if (item.type === 0) {
+          item.num++
+        }
+      })
+    }
+  }
+}
+const clickItem = (i, j, isUser = true) => {
+  // 点到雷
+  if (isUser && list.value[i][j].type === -1) {
+    alert('GAME OVER');
+    window.location.reload()
+    return
+  }
+  // 不是雷
+  list.value[i][j].state = 1
+  for (const item of getAroundItemList(i, j)) {
+    if (item.type === 0 && item.state === 0 && item.num === 0) {
+      item.state = 1
+      clickItem(item.i, item.j, false)
+    } else if (item.type === 0 && item.state === 0) {
+      item.state = 1
+    }
+  }
+}
+const mark = (e, curItem) => {
+  e.preventDefault()
+  if (curItem.state === 0) {
+    curItem.state = 2
+  } else if (curItem.state === 2) {
+    curItem.state = 0
+  }
+}
+const computedBoomNum = computed(() => {
+  return list.value.flat().reduce((acc, cur) => {
+    if (cur.state === 2) {
+      acc--
+    }
+    return acc
+  }, boomNum)
+})
+watch(list.value, (newVal) => {
+  let blackNum = 0
+  for (const item of newVal.flat()) {
+    if (item.state === 0 || item.state === 2) {
+      blackNum++
+    }
+  }
+  if (blackNum === boomNum) {
+    alert('YOU WIN')
+  }
+})
+const setting = () => {
+  const boomNum = prompt('设置地雷数量')
+  const size = prompt('设置行列数')
+  boomNum && localStorage.setItem('boomNum', boomNum)
+  size && localStorage.setItem('size', size)
+  window.location.reload()
 }
 </script>
 
 <template>
+  <span @click="setting">修改设置</span>
+  <br>
+  <span>剩余地雷数：{{computedBoomNum}}</span>
   <div class="layout">
-    <div class="item" v-for="(item,index) in list" :key="index">{{item===-1?'💣':item}}</div>
+    <div class="row" v-for="(item,index) in list" :key="index">
+      <div class="item" v-for="(_item,_index) in item" :key="_index"
+        :class="[{show:_item.state===1},{flag:_item.state===2}]" @click="clickItem(index,_index)"
+        @contextmenu="mark($event,_item)">
+        {{_item.type===-1?'雷':_item.num}}
+      </div>
+    </div>
   </div>
 </template>
 
@@ -59,16 +153,29 @@ for (let i = 0; i < list.value.length; i++) {
   height: 500px;
   display: grid;
   grid-template-rows: repeat(v-bind(row), 1fr);
-  grid-template-columns: repeat(v-bind(row), 1fr);
+}
+
+.row {
+  display: flex;
 }
 
 .item {
   cursor: pointer;
-  /* border: 1px solid black; */
-  width: 100%;
-  height: 100%;
+  border: 1px solid gray;
+  flex: 1;
   display: flex;
   justify-content: center;
   align-items: center;
+  background-color: black;
+  color: transparent;
+}
+
+.item.show {
+  background-color: transparent;
+  color: black;
+}
+
+.item.flag {
+  background-color: red;
 }
 </style>
